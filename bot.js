@@ -7,11 +7,9 @@ const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 const MINI_APP_URL = 'https://strong-sopapillas-be36e8.netlify.app';
 
 const bot = new Telegraf(BOT_TOKEN);
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-function monthName(m) {
-  return ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'][m];
-}
+const MN = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 
 // ── СТАРТ ────────────────────────────────────────────────────────
 bot.start(async (ctx) => {
@@ -19,14 +17,14 @@ bot.start(async (ctx) => {
   const name = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
   const username = ctx.from.username;
 
-  const { data: existing } = await supabase
-    .from('coaches')
-    .select('id')
-    .eq('telegram_id', tgId)
-    .maybeSingle();
+  const { data: existing } = await sb.from('coaches').select('id,is_blocked').eq('telegram_id', tgId).maybeSingle();
+
+  if (existing?.is_blocked) {
+    return ctx.reply('❌ Ваш доступ заблокирован. Обратитесь к администратору.');
+  }
 
   if (!existing) {
-    await supabase.from('coaches').insert({ telegram_id: tgId, name, username });
+    await sb.from('coaches').insert({ telegram_id: tgId, name, username });
   }
 
   await ctx.reply(
@@ -44,19 +42,16 @@ bot.start(async (ctx) => {
 // ── МОИ ДЕСЯТКИ ──────────────────────────────────────────────────
 bot.action('my_groups', async (ctx) => {
   const tgId = ctx.from.id;
-  const { data: coach } = await supabase
-    .from('coaches').select('id').eq('telegram_id', tgId).maybeSingle();
+  const { data: coach } = await sb.from('coaches').select('id,is_blocked').eq('telegram_id', tgId).maybeSingle();
 
   if (!coach) return ctx.reply('Сначала запусти /start');
+  if (coach.is_blocked) return ctx.reply('❌ Ваш доступ заблокирован.');
 
-  const { data: groups } = await supabase
-    .from('groups').select('id, name, start_date').eq('coach_id', coach.id);
+  const { data: groups } = await sb.from('groups').select('id,name,start_date').eq('coach_id', coach.id);
 
   if (!groups || !groups.length) {
     return ctx.editMessageText('У тебя пока нет десяток. Создай первую в дашборде!', {
-      ...Markup.inlineKeyboard([
-        [Markup.button.webApp('🚀 Открыть дашборд', `${MINI_APP_URL}?tg_id=${tgId}`)]
-      ])
+      ...Markup.inlineKeyboard([[Markup.button.webApp('🚀 Открыть дашборд', `${MINI_APP_URL}?tg_id=${tgId}`)]])
     });
   }
 
@@ -72,42 +67,49 @@ bot.action('my_groups', async (ctx) => {
 });
 
 // ── РЕФЛЕКСИЯ ИЗ ГРУППОВОГО ЧАТА ────────────────────────────────
-bot.hears(/^#рефлексия\s+(.+)/si, async (ctx) => {
+// Ловим #рефлексия от любого участника чата
+bot.hears(/^#рефлексия\s*([\s\S]*)/i, async (ctx) => {
   if (!ctx.chat || ctx.chat.type === 'private') return;
 
   const chatId = ctx.chat.id;
   const text = ctx.match[1].trim();
-  const fromUsername = ctx.from.username;
-  const fromName = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
 
-  const { data: groupChat } = await supabase
-    .from('group_chats').select('group_id').eq('chat_id', chatId).maybeSingle();
+  if (!text) {
+    return ctx.reply(`${ctx.from.first_name}, напиши текст рефлексии после хештега:\n#рефлексия Этот месяц я...`);
+  }
 
-  if (!groupChat) return;
+  const authorName = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
+  const authorUsername = ctx.from.username;
+  const authorTgId = ctx.from.id;
 
-  const { data: member } = await supabase
-    .from('members')
-    .select('id')
-    .eq('group_id', groupChat.group_id)
-    .or(`telegram_username.eq.${fromUsername},name.ilike.%${fromName}%`)
-    .maybeSingle();
+  // Находим группу по chat_id
+  const { data: groupChat } = await sb.from('group_chats').select('group_id').eq('chat_id', chatId).maybeSingle();
 
-  if (!member) {
-    return ctx.reply(`@${fromUsername}, не нашёл тебя в этой десятке. Обратись к коучу.`);
+  if (!groupChat) {
+    // Чат не привязан — молча игнорируем (не спамим в непривязанных чатах)
+    return;
+  }
+
+  // Сохраняем рефлексию
+  const { error } = await sb.from('group_reflections').insert({
+    group_id: groupChat.group_id,
+    chat_id: chatId,
+    author_name: authorName,
+    author_username: authorUsername,
+    telegram_user_id: authorTgId,
+    text: text
+  });
+
+  if (error) {
+    console.error('Error saving reflection:', error);
+    return ctx.reply(`${authorName}, не удалось сохранить рефлексию. Попробуй позже.`);
   }
 
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-
-  await supabase.from('monthly_entries').upsert({
-    member_id: member.id,
-    year, month,
-    reflection: text,
-    reflection_date: now.toISOString()
-  }, { onConflict: 'member_id,year,month' });
-
-  await ctx.reply(`✅ ${fromName}, рефлексия за ${monthName(month)} сохранена в дашборд!`);
+  await ctx.reply(
+    `✅ ${authorName}, рефлексия сохранена!\n📅 ${now.getDate()} ${MN[now.getMonth()]} ${now.getFullYear()}\n\nКоуч увидит её в дашборде десятки.`,
+    { reply_to_message_id: ctx.message.message_id }
+  );
 });
 
 // ── ПРИВЯЗКА ЧАТА К ДЕСЯТКЕ ──────────────────────────────────────
@@ -120,25 +122,23 @@ bot.command('link_group', async (ctx) => {
   if (!groupId) return ctx.reply('Укажи ID десятки: /link_group 123');
 
   const tgId = ctx.from.id;
-  const { data: coach } = await supabase
-    .from('coaches').select('id').eq('telegram_id', tgId).maybeSingle();
+  const { data: coach } = await sb.from('coaches').select('id').eq('telegram_id', tgId).maybeSingle();
+  if (!coach) return ctx.reply('Ты не зарегистрирован как коуч. Напиши /start боту в личку.');
 
-  if (!coach) return ctx.reply('Ты не зарегистрирован как коуч');
-
-  const { data: group } = await supabase
-    .from('groups').select('id,name')
-    .eq('id', groupId).eq('coach_id', coach.id).maybeSingle();
-
+  const { data: group } = await sb.from('groups').select('id,name').eq('id', groupId).eq('coach_id', coach.id).maybeSingle();
   if (!group) return ctx.reply('Десятка не найдена или не твоя');
 
-  await supabase.from('group_chats').upsert({
+  await sb.from('group_chats').upsert({
     group_id: groupId,
     chat_id: ctx.chat.id,
     chat_title: ctx.chat.title
   }, { onConflict: 'chat_id' });
 
   ctx.reply(
-    `✅ Чат привязан к десятке *${group.name}*!\n\nТеперь участники могут писать:\n#рефлексия Этот месяц я...\n\nИ текст автоматически попадёт в дашборд.`,
+    `✅ Чат *"${ctx.chat.title}"* привязан к десятке *"${group.name}"*!\n\n` +
+    `Теперь участники могут писать рефлексию:\n` +
+    `#рефлексия Этот месяц я...\n\n` +
+    `Коуч будет видеть все записи в дашборде.`,
     { parse_mode: 'Markdown' }
   );
 });
@@ -148,8 +148,22 @@ bot.command('myid', (ctx) => {
   ctx.reply(`Твой Telegram ID: \`${ctx.from.id}\``, { parse_mode: 'Markdown' });
 });
 
+// ── ПОМОЩЬ ───────────────────────────────────────────────────────
+bot.command('help', (ctx) => {
+  ctx.reply(
+    `📖 *Команды бота:*\n\n` +
+    `*/start* — открыть дашборд\n` +
+    `*/myid* — узнать свой Telegram ID\n\n` +
+    `*Для коучей (в чате десятки):*\n` +
+    `*/link_group ID* — привязать чат к десятке\n\n` +
+    `*Для участников (в чате десятки):*\n` +
+    `*#рефлексия* текст — сохранить рефлексию месяца`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
 bot.launch();
-console.log('🤖 Бот запущен');
+console.log('🤖 Бот запущен с поддержкой групповой рефлексии');
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
