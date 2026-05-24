@@ -35,10 +35,9 @@ async function sendQuestion(ctx, tgId) {
   await ctx.reply(`📋 *Вопрос ${session.step + 1} из 5*\n\n*${q.title}*\n\n${q.text}`, { parse_mode: 'Markdown', ...scoreKeyboard() });
 }
 
-bot.command('permatest', async (ctx) => {
-  if (ctx.chat.type !== 'private') {
-    const info = await bot.telegram.getMe();
-    return ctx.reply('Тест проходится в личных сообщениях. Нажми кнопку:', { ...Markup.inlineKeyboard([[Markup.button.url('Пройти тест PERMA', `https://t.me/${info.username}?start=perma`)]]) });
+bot.command('permalink', async (ctx) => {
+  ctx.reply(`🔗 *Ссылка на тест PERMA:*\n\nhttps://t.me/desetka_coaching_bot?start=perma\n\nОтправь участникам десятки.`, { parse_mode: 'Markdown' });
+});
   }
   testSessions[ctx.from.id] = { type: 'perma', step: 0, scores: {} };
   await ctx.reply(`🧠 *Диагностика PERMA*\n\n5 вопросов по шкале 1–5.\nОтвечай честно — это для тебя и твоего коуча.\n\nПоехали! 🚀`, { parse_mode: 'Markdown' });
@@ -121,9 +120,7 @@ bot.command('link_group', async (ctx) => {
 });
 
 bot.command('permalink', async (ctx) => {
-  const info = await bot.telegram.getMe();
-  ctx.reply(`🔗 *Ссылка на тест PERMA:*\n\nhttps://t.me/${info.username}?start=perma\n\nОтправь участникам десятки.`, { parse_mode: 'Markdown' });
-});
+return ctx.reply('Тест проходится в личных сообщениях. Нажми кнопку:', { ...Markup.inlineKeyboard([[Markup.button.url('Пройти тест PERMA', `https://t.me/desetka_coaching_bot?start=perma`)]]) });
 
 bot.command('myid', (ctx) => ctx.reply(`Твой ID: \`${ctx.from.id}\``, { parse_mode: 'Markdown' }));
 bot.command('help', (ctx) => ctx.reply(`📖 *Команды:*\n\n*/start* — дашборд\n*/permatest* — тест PERMA\n*/permalink* — ссылка для участников\n*/myid* — твой ID\n\n*В чате десятки:*\n*/link_group ID* — привязать чат\n*#рефлексия* текст — рефлексия`, { parse_mode: 'Markdown' }));
