@@ -1,6 +1,6 @@
 const { Telegraf, Markup } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
-
+// v2
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = 'https://atzcqmykrvvjvtgkxuxy.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
