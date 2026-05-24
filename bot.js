@@ -1,9 +1,9 @@
 const { Telegraf, Markup } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 
-const BOT_TOKEN = '8989739941:AAFYe1qHGsV-PTyaev3rix8ydvX9leAQ3oc';
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPABASE_URL = 'https://atzcqmykrvvjvtgkxuxy.supabase.co';
-const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0emNxbXlrcnZ2anZ0Z2t4dXh5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTYwNDUwOCwiZXhwIjoyMDk1MTgwNTA4fQ.nGKWDkUGdeA1kjqhAyqdFMVfg29IvNMK6wukiTxUlaU';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const MINI_APP_URL = 'https://strong-sopapillas-be36e8.netlify.app';
 const BOT_USERNAME = 'desetka_coaching_bot';
 
