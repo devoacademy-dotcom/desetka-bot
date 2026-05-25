@@ -252,6 +252,7 @@ bot.hears(/^#рефлексия\s*([\s\S]*)/i, async (ctx) => {
 
 // ── ONBOARD TEXT HANDLER ──────────────────────────────────────────
 bot.on('text', async (ctx) => {
+  if (ctx.chat.type !== 'private') return;
   const tgId = ctx.from.id;
   const s = sessions[tgId];
   const text = ctx.message.text;
