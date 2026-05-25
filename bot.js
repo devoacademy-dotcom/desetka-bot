@@ -11,7 +11,7 @@ const bot = new Telegraf(BOT_TOKEN);
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const MN = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const sessions = {};
-
+bot.use((ctx, next) => { console.log('UPD:', ctx.updateType, ctx.from?.id); return next(); });
 const PERMA_Q = [
   { key: 'P', title: 'P — Позитивные эмоции', text: 'Насколько часто ты живёшь в состоянии умиротворения, благодарности, вдохновения и любви?\n\n1 — редко, часто стресс\n5 — живу на пике интереса и любви к жизни' },
   { key: 'E', title: 'E — Вовлечённость', text: 'Как часто ты испытываешь состояние потока — когда не чувствуешь времени?\n\n1 — крайне редко, всё скучно\n5 — каждый день по несколько часов' },
@@ -276,6 +276,6 @@ bot.on('text', async (ctx) => {
 });
 
 bot.launch();
-console.log('Бот запущен v2');
+console.log('Бот запущен v3 с логами');
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
