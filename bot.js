@@ -1,17 +1,20 @@
 const { Telegraf, Markup } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
+const http = require('http');
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '8989739941:AAFYe1qHGsV-PTyaev3rix8ydvX9leAQ3oc';
 const SUPABASE_URL = 'https://atzcqmykrvvjvtgkxuxy.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0emNxbXlrcnZ2anZ0Z2t4dXh5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTYwNDUwOCwiZXhwIjoyMDk1MTgwNTA4fQ.nGKWDkUGdeA1kjqhAyqdFMVfg29IvNMK6wukiTxUlaU';
 const MINI_APP_URL = 'https://strong-sopapillas-be36e8.netlify.app';
 const BOT_USERNAME = 'desetka_coaching_bot';
+const WEBHOOK_DOMAIN = 'giving-ambition-production-e6f5.up.railway.app';
+const PORT = process.env.PORT || 3000;
 
 const bot = new Telegraf(BOT_TOKEN);
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 const MN = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 const sessions = {};
-bot.use((ctx, next) => { console.log('MSG:', ctx.updateType, ctx.from?.id, ctx.message?.text?.slice(0,20)); return next(); });
+
 const PERMA_Q = [
   { key: 'P', title: 'P — Позитивные эмоции', text: 'Насколько часто ты живёшь в состоянии умиротворения, благодарности, вдохновения и любви?\n\n1 — редко, часто стресс\n5 — живу на пике интереса и любви к жизни' },
   { key: 'E', title: 'E — Вовлечённость', text: 'Как часто ты испытываешь состояние потока — когда не чувствуешь времени?\n\n1 — крайне редко, всё скучно\n5 — каждый день по несколько часов' },
@@ -28,7 +31,8 @@ const ONBOARD_STEPS = [
   { key: 'point_a_date',   q: 'Напиши дату начала работы в десятке\n\nНапример: 20.05.2026' },
   { key: 'point_a_profit', q: 'Напиши текущую чистую прибыль в месяц (только цифра в рублях)\n\nНапример: 150000' },
   { key: 'debt_biz',       q: 'Напиши бизнес-долги (только цифра в рублях)\n\nЕсли нет — напиши 0' },
-  { key: 'debt_personal',  q: 'Напиши личные долги — ипотека, кредиты (только цифра в рублях)\n\nЕсли нет — напиши 0' }
+  { key: 'debt_personal',  q: 'Напиши личные долги — ипотека, кредиты (только цифра в рублях)\n\nЕсли нет — напиши 0' },
+  { key: 'city',           q: 'Из какого ты города или страны?\n\nНапример: Москва, Дубай, Лондон, Алматы' }
 ];
 
 function getResult(total) {
@@ -47,11 +51,11 @@ function keyboard5() {
   ]]);
 }
 
-// ── START ─────────────────────────────────────────────────────────
 bot.start(async (ctx) => {
   const tgId = ctx.from.id;
   const name = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ');
   const payload = ctx.startPayload;
+  console.log('START:', tgId, payload);
 
   if (payload && payload.startsWith('onboard_')) {
     const groupId = parseInt(payload.replace('onboard_', ''));
@@ -78,19 +82,13 @@ bot.start(async (ctx) => {
   );
 });
 
-// ── COMMANDS ──────────────────────────────────────────────────────
-bot.command('myid', (ctx) => ctx.reply('Твой ID: ' + ctx.from.id));
+bot.command('myid', (ctx) => {
+  console.log('MYID:', ctx.from.id);
+  ctx.reply('Твой ID: ' + ctx.from.id);
+});
 
 bot.command('help', (ctx) => ctx.reply(
-  'Команды:\n' +
-  '/start — дашборд\n' +
-  '/myid — твой ID\n' +
-  '/permatest — тест PERMA\n' +
-  '/permalink — ссылка на тест\n\n' +
-  'В чате десятки:\n' +
-  '/link_group ID — привязать чат\n' +
-  '/invite — анкета участника\n' +
-  '#рефлексия текст — рефлексия'
+  'Команды:\n/start — дашборд\n/myid — твой ID\n/permatest — тест PERMA\n/permalink — ссылка на тест\n\nВ чате десятки:\n/link_group ID — привязать чат\n/invite — анкета участника\n#рефлексия текст — рефлексия'
 ));
 
 bot.command('permatest', async (ctx) => {
@@ -133,7 +131,6 @@ bot.command('invite', async (ctx) => {
   );
 });
 
-// ── ACTIONS ───────────────────────────────────────────────────────
 bot.action('my_groups', async (ctx) => {
   const tgId = ctx.from.id;
   const { data: coach } = await sb.from('coaches').select('id,is_blocked').eq('telegram_id', tgId).maybeSingle();
@@ -155,6 +152,7 @@ bot.action(/^sc_(\d)$/, async (ctx) => {
   const tgId = ctx.from.id;
   const score = parseInt(ctx.match[1]);
   const s = sessions[tgId];
+  console.log('SCORE:', tgId, score, s ? s.type : 'no session');
   if (!s) return ctx.answerCbQuery('Начни заново');
   await ctx.answerCbQuery('Принято: ' + score);
 
@@ -168,21 +166,25 @@ bot.action(/^sc_(\d)$/, async (ctx) => {
     const result = getResult(total);
     const d = s.data;
     const ps = s.perma_scores;
+    console.log('SAVING member:', tgId, d.name, s.group_id);
     try {
       const initials = (d.name||'').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-      const { data: member } = await sb.from('members').upsert({
+      const { data: member, error } = await sb.from('members').upsert({
         group_id: s.group_id, name: d.name, initials: initials,
         niche: d.niche, year_goal: d.year_goal, q3_goal: d.q3_goal,
         point_a_date: d.point_a_date, point_a_profit: d.point_a_profit || 0,
         point_a_debt_biz: d.debt_biz || 0, point_a_debt_personal: d.debt_personal || 0,
         telegram_username: ctx.from.username, telegram_user_id: tgId
       }, { onConflict: 'telegram_user_id' }).select('id').single();
+      if (error) console.error('MEMBER ERROR:', error);
+      else console.log('MEMBER SAVED:', member.id);
       if (member) {
         const now = new Date();
-        await sb.from('monthly_entries').upsert({
+        const { error: e2 } = await sb.from('monthly_entries').upsert({
           member_id: member.id, year: now.getFullYear(), month: now.getMonth(),
           perma_p: ps.P, perma_e: ps.E, perma_r: ps.R, perma_m: ps.M, perma_a: ps.A
         }, { onConflict: 'member_id,year,month' });
+        if (e2) console.error('ENTRY ERROR:', e2);
         await sb.from('standards').upsert({
           member_id: member.id, health: 50, environment: 50, learning: 50, sport: 50, sleep: 50
         }, { onConflict: 'member_id' });
@@ -224,14 +226,11 @@ bot.action(/^sc_(\d)$/, async (ctx) => {
       }
     } catch(e) { console.error('Save error:', e); }
     return ctx.reply(
-      'Тест PERMA завершён!\n\n' +
-      'Баллы:\nP: ' + sc.P + '/5\nE: ' + sc.E + '/5\nR: ' + sc.R + '/5\nM: ' + sc.M + '/5\nA: ' + sc.A + '/5\n\n' +
-      'Итого: ' + total + '/25 — ' + r.zone + '\n\n' + r.desc + '\n' + r.strategy + '\n\nРезультаты переданы коучу.'
+      'Тест PERMA завершён!\n\nБаллы:\nP: ' + sc.P + '/5\nE: ' + sc.E + '/5\nR: ' + sc.R + '/5\nM: ' + sc.M + '/5\nA: ' + sc.A + '/5\n\nИтого: ' + total + '/25 — ' + r.zone + '\n\n' + r.desc + '\n' + r.strategy + '\n\nРезультаты переданы коучу.'
     );
   }
 });
 
-// ── REFLEKSIYA ────────────────────────────────────────────────────
 bot.hears(/^#рефлексия\s*([\s\S]*)/i, async (ctx) => {
   if (!ctx.chat || ctx.chat.type === 'private') return;
   const text = ctx.match[1].trim();
@@ -250,12 +249,12 @@ bot.hears(/^#рефлексия\s*([\s\S]*)/i, async (ctx) => {
   });
 });
 
-// ── ONBOARD TEXT HANDLER ──────────────────────────────────────────
 bot.on('text', async (ctx) => {
   if (ctx.chat.type !== 'private') return;
   const tgId = ctx.from.id;
   const s = sessions[tgId];
   const text = ctx.message.text;
+  console.log('TEXT:', tgId, text.slice(0,20), s ? s.type + ':' + s.step : 'no session');
   if (!s || s.type !== 'onboard' || s.step >= ONBOARD_STEPS.length) return;
   const step = ONBOARD_STEPS[s.step];
   if (['point_a_profit', 'debt_biz', 'debt_personal'].includes(step.key)) {
@@ -276,7 +275,37 @@ bot.on('text', async (ctx) => {
   }
 });
 
-bot.launch();
-console.log('Бот запущен v2');
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+// ── WEBHOOK MODE ──────────────────────────────────────────────────
+async function startWebhook() {
+  const webhookUrl = 'https://' + WEBHOOK_DOMAIN + '/webhook';
+  await bot.telegram.setWebhook(webhookUrl);
+  console.log('Webhook set:', webhookUrl);
+
+  const app = http.createServer(async (req, res) => {
+    if (req.method === 'POST' && req.url === '/webhook') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const update = JSON.parse(body);
+          await bot.handleUpdate(update);
+        } catch(e) {
+          console.error('Webhook error:', e);
+        }
+        res.writeHead(200);
+        res.end('OK');
+      });
+    } else {
+      res.writeHead(200);
+      res.end('Bot is running');
+    }
+  });
+
+  app.listen(PORT, () => {
+    console.log('Бот запущен v3 webhook на порту', PORT);
+  });
+}
+
+startWebhook();
+process.once('SIGINT', () => process.exit(0));
+process.once('SIGTERM', () => process.exit(0));
